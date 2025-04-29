@@ -1,25 +1,21 @@
-import mysql.connector
+import pymysql
 
-try:
-    connection = mysql.connector.connect(
-        host='185.244.146.135',
-        port=3306,
-        user='erbilkareverify',
-        password='234!1Extl',
-        database='erbilkareverify'
-    )
-    
-    if connection.is_connected():
-        print("Veritabanına başarıyla bağlandı!")
-        cursor = connection.cursor()
-        cursor.execute("SELECT 1")
-        result = cursor.fetchone()
-        print("Test sorgusu sonucu:", result)
+def test_connection():
+    try:
+        # Veritabanı bağlantı bilgilerini güvenli bir şekilde al
+        db_config = {
+            'host': 'YOUR_DB_HOST',
+            'port': 3306,
+            'user': 'YOUR_DB_USER',
+            'password': 'YOUR_DB_PASSWORD',
+            'database': 'YOUR_DB_NAME'
+        }
         
-except mysql.connector.Error as err:
-    print(f"Veritabanına bağlanılamadı: {err}")
-    
-finally:
-    if 'connection' in locals() and connection.is_connected():
+        connection = pymysql.connect(**db_config)
+        print("Veritabanı bağlantısı başarılı!")
         connection.close()
-        print("Veritabanı bağlantısı kapatıldı.") 
+    except pymysql.Error as err:
+        print(f"Veritabanı bağlantı hatası: {err}")
+
+if __name__ == "__main__":
+    test_connection() 
