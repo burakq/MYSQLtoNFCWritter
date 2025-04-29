@@ -1,0 +1,1 @@
+../../Resources/smartcard/CardRequest.py

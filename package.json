@@ -1,0 +1,25 @@
+{
+  "name": "nfcpy",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "NFC Eser Doğrulama Uygulaması",
+  "build": {
+    "appId": "com.nfcpy.app",
+    "mac": {
+      "category": "public.app-category.utilities"
+    }
+  },
+  "dependencies": {
+    "electron": "^35.2.1",
+    "mysql2": "^3.14.1",
+    "nfc-pcsc": "^0.8.1",
+    "node-hid": "^3.1.2"
+  }
+}

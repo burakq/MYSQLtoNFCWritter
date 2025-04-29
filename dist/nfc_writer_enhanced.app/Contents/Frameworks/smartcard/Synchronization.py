@@ -1,0 +1,1 @@
+../../Resources/smartcard/Synchronization.py

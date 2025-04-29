@@ -1,0 +1,1 @@
+../../Resources/smartcard/__init__.py
