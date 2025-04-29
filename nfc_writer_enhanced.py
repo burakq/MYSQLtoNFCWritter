@@ -14,6 +14,10 @@ import os
 import logging
 import time
 import bcrypt
+from dotenv import load_dotenv
+
+# .env dosyasını yükle
+load_dotenv()
 
 # Log dosyası ayarları
 log_dir = os.path.expanduser("~/Library/Logs")
@@ -314,19 +318,19 @@ class NFCWriterEnhanced(QMainWindow):
     
     def get_mysql_connection(self):
         try:
-            logging.info("Veritabanı bağlantısı deneniyor...")
-            connection = pymysql.connect(
-                host='185.244.146.135',
-                port=3306,
-                user='erbilkareverify',
-                password='234!1Extl',
-                database='erbilkareverify'
-            )
-            logging.info("Veritabanı bağlantısı başarılı")
+            # Veritabanı bağlantı bilgilerini güvenli bir şekilde al
+            db_config = {
+                'host': 'YOUR_DB_HOST',
+                'port': 3306,
+                'user': 'YOUR_DB_USER',
+                'password': 'YOUR_DB_PASSWORD',
+                'database': 'YOUR_DB_NAME'
+            }
+            
+            connection = pymysql.connect(**db_config)
             return connection
         except pymysql.Error as err:
-            logging.error(f"Veritabanı bağlantı hatası: {err}")
-            QMessageBox.critical(self, "Hata", f"Veritabanına bağlanılamadı: {err}")
+            self.show_error(f"Veritabanı bağlantı hatası: {err}")
             return None
     
     def load_artworks(self):
