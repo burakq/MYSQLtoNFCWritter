@@ -4,9 +4,10 @@ import pymysql
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QPushButton, QLabel, QTableWidget, 
                             QTableWidgetItem, QMessageBox, QStatusBar, QFrame,
-                            QDialog, QLineEdit, QFormLayout, QDialogButtonBox)
+                            QDialog, QLineEdit, QFormLayout, QDialogButtonBox,
+                            QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, QSettings
-from PyQt6.QtGui import QColor, QPalette, QIcon, QFont
+from PyQt6.QtGui import QColor, QPalette, QIcon, QFont, QPixmap
 import sys
 import datetime
 import json
@@ -14,10 +15,7 @@ import os
 import logging
 import time
 import bcrypt
-from dotenv import load_dotenv
-
-# .env dosyasını yükle
-load_dotenv()
+import urllib.request
 
 # Log dosyası ayarları
 log_dir = os.path.expanduser("~/Library/Logs")
@@ -35,26 +33,123 @@ class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Giriş")
-        self.setFixedSize(300, 150)
+        self.setFixedSize(400, 250)  # Pencere boyutunu büyüttük
         
-        layout = QFormLayout(self)
+        # Ana layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(20)  # Elemanlar arası boşluk
+        main_layout.setContentsMargins(30, 30, 30, 30)  # Kenar boşlukları
         
+        # Form layout
+        form_layout = QFormLayout()
+        form_layout.setSpacing(15)  # Form elemanları arası boşluk
+        
+        # E-posta alanı
         self.email = QLineEdit()
+        self.email.setMinimumHeight(35)  # Yükseklik
+        self.email.setStyleSheet("""
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+        """)
+        
+        # Şifre alanı
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password.setMinimumHeight(35)
+        self.password.setStyleSheet("""
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+        """)
         
-        layout.addRow("E-posta:", self.email)
-        layout.addRow("Şifre:", self.password)
+        # Beni hatırla checkbox'ı
+        self.remember_me = QCheckBox("Beni hatırla")
+        self.remember_me.setStyleSheet("""
+            QCheckBox {
+                font-size: 14px;
+                spacing: 8px;
+            }
+        """)
         
+        # Form elemanlarını ekle
+        form_layout.addRow("E-posta:", self.email)
+        form_layout.addRow("Şifre:", self.password)
+        form_layout.addRow("", self.remember_me)
+        
+        # Butonlar
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        buttons.setStyleSheet("""
+            QPushButton {
+                min-width: 100px;
+                min-height: 35px;
+                font-size: 14px;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton[text="OK"] {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+            }
+            QPushButton[text="OK"]:hover {
+                background-color: #45a049;
+            }
+            QPushButton[text="Cancel"] {
+                background-color: #f44336;
+                color: white;
+                border: none;
+            }
+            QPushButton[text="Cancel"]:hover {
+                background-color: #d32f2f;
+            }
+        """)
+        
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        
+        # Layout'ları ana layout'a ekle
+        main_layout.addLayout(form_layout)
+        main_layout.addWidget(buttons)
+        
+        # Ayarları yükle
+        self.settings = QSettings("NFCWriter", "Settings")
+        self.load_remembered_credentials()
+    
+    def load_remembered_credentials(self):
+        # Son giriş zamanını kontrol et
+        last_login = self.settings.value("last_login")
+        if last_login:
+            last_login = datetime.datetime.fromisoformat(last_login)
+            if (datetime.datetime.now() - last_login).days <= 30:  # 1 ay
+                self.email.setText(self.settings.value("remembered_email", ""))
+                self.password.setText(self.settings.value("remembered_password", ""))
+                self.remember_me.setChecked(True)
     
     def get_credentials(self):
-        return self.email.text(), self.password.text()
+        email = self.email.text()
+        password = self.password.text()
+        
+        if self.remember_me.isChecked():
+            # Kullanıcı bilgilerini kaydet
+            self.settings.setValue("remembered_email", email)
+            self.settings.setValue("remembered_password", password)
+            self.settings.setValue("last_login", datetime.datetime.now().isoformat())
+        else:
+            # Kullanıcı bilgilerini temizle
+            self.settings.remove("remembered_email")
+            self.settings.remove("remembered_password")
+            self.settings.remove("last_login")
+        
+        return email, password
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -65,11 +160,12 @@ class SettingsDialog(QDialog):
         layout = QFormLayout(self)
         
         # Veritabanı Ayarları
-        self.db_host = QLineEdit(self.settings.value("db_host", "localhost"))
-        self.db_port = QLineEdit(self.settings.value("db_port", "8889"))
-        self.db_user = QLineEdit(self.settings.value("db_user", "root"))
-        self.db_password = QLineEdit(self.settings.value("db_password", "root"))
-        self.db_name = QLineEdit(self.settings.value("db_name", "artwork_auth"))
+        self.db_host = QLineEdit(self.settings.value("db_host", "185.244.146.135"))
+        self.db_port = QLineEdit(self.settings.value("db_port", "3306"))
+        self.db_user = QLineEdit(self.settings.value("db_user", "erbilkareverify"))
+        self.db_password = QLineEdit(self.settings.value("db_password", "234!1Extl"))
+        self.db_password.setEchoMode(QLineEdit.EchoMode.Password)  # Şifreyi gizle
+        self.db_name = QLineEdit(self.settings.value("db_name", "erbilkareverify"))
         
         # URL Ayarları
         self.base_url = QLineEdit(self.settings.value("base_url", "erbilkare.com"))
@@ -105,6 +201,10 @@ class NFCWriterEnhanced(QMainWindow):
             super().__init__()
             self.setWindowTitle("NFC Kart Yazıcı (Gelişmiş)")
             self.setGeometry(100, 100, 1000, 700)
+            
+            # Sayfalama için değişkenler
+            self.current_page = 1
+            self.page_size = 20
             
             # Icon ayarla - resource_path kullanarak
             icon_path = resource_path("logo.icns")
@@ -204,10 +304,39 @@ class NFCWriterEnhanced(QMainWindow):
             
             # Tablo
             self.table = QTableWidget()
-            self.table.setColumnCount(5)  # Yeni sütun: Durum
-            self.table.setHorizontalHeaderLabels(["ID", "Eser Adı", "Sanatçı", "Doğrulama Kodu", "Durum"])
+            self.table.setColumnCount(5)
+            self.table.setHorizontalHeaderLabels(["Sıra", "Eser Adı", "Sanatçı", "Doğrulama Kodu", "Durum"])
             self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
             self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+            self.table.verticalHeader().setVisible(False)  # Sol taraftaki sıra numaralarını gizle
+            self.table.setStyleSheet("""
+                QTableWidget {
+                    background-color: white;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    color: #333;
+                    gridline-color: #ddd;
+                }
+                QTableWidget::item {
+                    padding: 8px;
+                    border-bottom: 1px solid #eee;
+                }
+                QTableWidget::item:selected {
+                    background-color: #f5f5f5;
+                    color: #333;
+                }
+                QHeaderView::section {
+                    background-color: #f8f8f8;
+                    color: #333;
+                    padding: 8px;
+                    border: none;
+                    border-bottom: 2px solid #ddd;
+                    font-weight: bold;
+                }
+                QTableWidget::item:hover {
+                    background-color: #f9f9f9;
+                }
+            """)
             layout.addWidget(self.table)
             
             # Butonlar
@@ -215,12 +344,22 @@ class NFCWriterEnhanced(QMainWindow):
             button_frame.setFrameStyle(QFrame.Shape.StyledPanel)
             button_layout = QHBoxLayout(button_frame)
             
+            # Sayfalama butonları
+            self.prev_button = QPushButton("Önceki")
+            self.prev_button.setEnabled(False)
+            self.prev_button.clicked.connect(self.prev_page)
+            
+            self.next_button = QPushButton("Sonraki")
+            self.next_button.clicked.connect(self.next_page)
+            
             self.refresh_button = QPushButton("Yenile")
             self.write_button = QPushButton("Karta Yaz")
             self.read_button = QPushButton("Kartı Oku")
             self.clear_button = QPushButton("Kartı Temizle")
             self.settings_button = QPushButton("Ayarlar")
             
+            button_layout.addWidget(self.prev_button)
+            button_layout.addWidget(self.next_button)
             button_layout.addWidget(self.refresh_button)
             button_layout.addWidget(self.write_button)
             button_layout.addWidget(self.read_button)
@@ -318,55 +457,198 @@ class NFCWriterEnhanced(QMainWindow):
     
     def get_mysql_connection(self):
         try:
-            # Veritabanı bağlantı bilgilerini güvenli bir şekilde al
-            db_config = {
-                'host': 'YOUR_DB_HOST',
-                'port': 3306,
-                'user': 'YOUR_DB_USER',
-                'password': 'YOUR_DB_PASSWORD',
-                'database': 'YOUR_DB_NAME'
-            }
+            logging.info("Veritabanı bağlantısı deneniyor...")
+            host = "185.244.146.135"  # Sabit IP adresi
+            port = 3306
+            user = "erbilkareverify"
+            password = "234!1Extl"
+            database = "erbilkareverify"
             
-            connection = pymysql.connect(**db_config)
+            logging.info(f"Bağlantı parametreleri: host={host}, port={port}, user={user}, db={database}")
+            
+            connection = pymysql.connect(
+                host=host,
+                port=port,
+                user=user,
+                password=password,
+                database=database
+            )
+            logging.info("Veritabanı bağlantısı başarılı")
             return connection
         except pymysql.Error as err:
-            self.show_error(f"Veritabanı bağlantı hatası: {err}")
+            error_msg = f"Veritabanı bağlantı hatası: {err}\n"
+            error_msg += f"Host: {host}\n"
+            error_msg += f"Port: {port}\n"
+            error_msg += f"Kullanıcı: {user}\n"
+            error_msg += f"Veritabanı: {database}"
+            logging.error(error_msg)
+            QMessageBox.critical(self, "Hata", error_msg)
             return None
     
-    def load_artworks(self):
+    def load_artworks(self, page=1, page_size=20):
+        # Yenileme butonunu devre dışı bırak
+        self.refresh_button.setEnabled(False)
+        
+        # Dönen efekt ekle
+        self.refresh_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        
+        # Animasyon efekti
+        self.refresh_button.setText("Yenileniyor...")
+        QApplication.processEvents()
+        
+        # Dönen animasyon için timer
+        self.rotation_angle = 0
+        self.rotation_timer = QTimer()
+        self.rotation_timer.timeout.connect(self.rotate_button)
+        self.rotation_timer.start(50)  # 50ms aralıklarla döndür
+        
+        # Sayfa ve sayfa boyutu kontrolü
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 20
+            
         connection = self.get_mysql_connection()
         if connection:
             try:
                 cursor = connection.cursor()
+                
+                # Site URL'sini ayarlardan al
+                site_url = self.settings.value("site_url", "https://erbilkare.com/artworks/")
+                
+                # Toplam kayıt sayısını al
                 cursor.execute("""
-                    SELECT a.id, a.title, a.artist_name, a.verification_code 
-                    FROM artworks a 
-                    WHERE a.verification_code NOT IN (
-                        SELECT verification_code 
-                        FROM nfc_written_logs 
-                        WHERE DATE(written_at) = CURDATE()
-                    )
-                    ORDER BY a.id DESC 
-                    LIMIT 50
+                    SELECT COUNT(*) 
+                    FROM artworks a
+                    LEFT JOIN nfc_written_logs nwl ON a.verification_code = nwl.verification_code
                 """)
+                total_records = cursor.fetchone()[0]
+                total_pages = (total_records + page_size - 1) // page_size
+                
+                # Sayfa numarasını kontrol et
+                if page > total_pages:
+                    page = total_pages
+                
+                # Sayfalama ile verileri çek
+                offset = (page - 1) * page_size
+                cursor.execute("""
+                    SELECT 
+                        a.id, 
+                        a.title, 
+                        a.artist_name, 
+                        a.verification_code,
+                        CASE 
+                            WHEN nwl.verification_code IS NOT NULL THEN 'Yazıldı'
+                            ELSE 'Yazılmadı'
+                        END as status
+                    FROM artworks a
+                    LEFT JOIN nfc_written_logs nwl ON a.verification_code = nwl.verification_code
+                    ORDER BY a.id DESC 
+                    LIMIT %s OFFSET %s
+                """, (page_size, offset))
                 results = cursor.fetchall()
                 
+                # Tablo sütunlarını ayarla
                 self.table.setRowCount(len(results))
                 for i, row in enumerate(results):
-                    for j, value in enumerate(row):
-                        self.table.setItem(i, j, QTableWidgetItem(str(value)))
-                    # Durum sütunu
-                    self.table.setItem(i, 4, QTableWidgetItem("Yazılmadı"))
-                    self.table.item(i, 4).setForeground(QColor("red"))
+                    # Sıra numarası (sayfa numarasına göre)
+                    row_number = (page - 1) * page_size + i + 1
+                    self.table.setItem(i, 0, QTableWidgetItem(str(row_number)))
+                    
+                    # Eser Adı
+                    self.table.setItem(i, 1, QTableWidgetItem(str(row[1])))
+                    
+                    # Sanatçı
+                    self.table.setItem(i, 2, QTableWidgetItem(str(row[2])))
+                    
+                    # Doğrulama Kodu
+                    self.table.setItem(i, 3, QTableWidgetItem(str(row[3])))
+                    
+                    # Durum
+                    status_item = QTableWidgetItem(str(row[4]))
+                    if row[4] == "Yazıldı":
+                        status_item.setForeground(QColor("green"))
+                    else:
+                        status_item.setForeground(QColor("red"))
+                    self.table.setItem(i, 4, status_item)
                 
-                self.table.resizeColumnsToContents()
-                self.statusBar.showMessage(f"{len(results)} eser yüklendi")
+                # Sütun genişliklerini ayarla
+                self.table.setColumnWidth(0, 50)   # Sıra
+                self.table.setColumnWidth(1, 250)  # Eser Adı - genişliği artırıldı
+                self.table.setColumnWidth(2, 200)  # Sanatçı - genişliği artırıldı
+                self.table.setColumnWidth(3, 150)  # Doğrulama Kodu
+                self.table.setColumnWidth(4, 100)  # Durum
+                
+                # Sayfalama bilgilerini göster
+                self.statusBar.showMessage(f"Sayfa {page}/{total_pages} - Toplam {total_records} eser")
+                
+                # Sayfalama butonlarını güncelle
+                self.prev_button.setEnabled(page > 1)
+                self.next_button.setEnabled(page < total_pages)
                 
             except pymysql.Error as err:
                 self.show_error("MySQL Sorgu Hatası", f"Eserler yüklenemedi: {err}")
             finally:
                 cursor.close()
                 connection.close()
+                
+                # Animasyonu durdur
+                self.rotation_timer.stop()
+                
+                # Yenileme butonunu tekrar aktif et
+                self.refresh_button.setEnabled(True)
+                self.refresh_button.setText("Yenile")
+                self.refresh_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #4CAF50;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 4px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background-color: #45a049;
+                    }
+                """)
+    
+    def rotate_button(self):
+        # Dönen animasyon için açıyı güncelle
+        self.rotation_angle = (self.rotation_angle + 10) % 360
+        
+        # Dönen efekt için CSS
+        self.refresh_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #cccccc;
+                color: #666666;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                background-image: url('refresh_icon.png');
+                background-repeat: no-repeat;
+                background-position: center;
+                background-size: 20px;
+                transform: rotate({self.rotation_angle}deg);
+            }}
+            QPushButton:disabled {{
+                background-color: #cccccc;
+                color: #666666;
+            }}
+        """)
     
     def show_error(self, title, message):
         QMessageBox.critical(self, title, message)
@@ -387,7 +669,28 @@ class NFCWriterEnhanced(QMainWindow):
             return
         
         verification_code = self.table.item(current_row, 3).text()
-        artwork_id = self.table.item(current_row, 0).text()
+        
+        # SQL sorgusundan artwork_id'yi al
+        connection = self.get_mysql_connection()
+        if connection:
+            try:
+                cursor = connection.cursor()
+                cursor.execute("""
+                    SELECT id FROM artworks 
+                    WHERE verification_code = %s
+                """, (verification_code,))
+                result = cursor.fetchone()
+                if result:
+                    artwork_id = result[0]  # integer olarak artwork_id
+                else:
+                    self.show_error("Hata", "Eser bulunamadı!")
+                    return
+            except pymysql.Error as err:
+                self.show_error("Veritabanı Hatası", f"Eser ID'si alınamadı: {err}")
+                return
+            finally:
+                cursor.close()
+                connection.close()
         
         try:
             connection = self.reader.createConnection()
@@ -572,6 +875,27 @@ class NFCWriterEnhanced(QMainWindow):
                 connection.disconnect()
             except:
                 pass
+
+    def download_image(self, url):
+        try:
+            with urllib.request.urlopen(url) as response:
+                return response.read()
+        except Exception as e:
+            logging.error(f"Görsel indirme hatası: {str(e)}")
+            return None
+
+    def prev_page(self):
+        if self.current_page > 1:
+            self.current_page -= 1
+            self.load_artworks(self.current_page, self.page_size)
+            self.next_button.setEnabled(True)
+            if self.current_page == 1:
+                self.prev_button.setEnabled(False)
+
+    def next_page(self):
+        self.current_page += 1
+        self.load_artworks(self.current_page, self.page_size)
+        self.prev_button.setEnabled(True)
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
